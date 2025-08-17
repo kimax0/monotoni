@@ -89,26 +89,33 @@ vector<vector<int>> legalMoves(const vector<int>& currentPos, int n, const vecto
     return moves;
 }
 
-void bruteForce(const vector<int>& currentPos, int n, int player) {
-  vector<vector<int>> moves = legalMoves(currentPos, n, precomputeUnitCircle(n));
-  if (moves.empty()) {
-    if (player == 1) {
-      cout << "Player 1 wins!\n";
-    } else if (player == -1) {
-      cout << "Player 2 wins!\n";
-    } else {
-      cout << "Nesto se opasno desilo.\n";
+void bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<int>> path) {
+    // Add the current position to the path
+    path.push_back(currentPos);
+
+    vector<vector<int>> moves = legalMoves(currentPos, n, precomputeUnitCircle(n));
+    if (moves.empty()) {
+        // Print the entire game
+        cout << "Game sequence:\n";
+        for (auto &pos : path) {
+            cout << "  ";
+            for (int val : pos) cout << val << " ";
+            cout << "\n";
+        }
+        if (player == 1) {
+            cout << "Player 1 wins!\n";
+        } else if (player == -1) {
+            cout << "Player 2 wins!\n";
+        } else {
+            cout << "Nesto se opasno desilo.\n";
+        }
+        cout << "---------------------------\n";
+        return;
     }
-    return;
-  }
-  
-  for (const vector<int>& move : moves) {
-    for (int val : currentPos) {
-      cout << val << " ";
+
+    for (const vector<int>& move : moves) {
+        bruteForce(move, n, -player, path);
     }
-    cout << " -> ";
-    bruteForce(move, n, -player);
-  }
 }
 
 int main(int argc, char* argv[]) {
@@ -146,7 +153,7 @@ int main(int argc, char* argv[]) {
         cout << endl;
     }
 
-    bruteForce(startPos, n, 1);
+    bruteForce(startPos, n, 1, {});
 
     return 0;
 }
