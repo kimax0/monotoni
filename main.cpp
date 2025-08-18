@@ -59,7 +59,7 @@ vector<vector<int>> legalMoves(const vector<int>& currentPos, int n, const vecto
         for (int j = 1; j < currentPos[i]; ++j) {
             vector<int> newPos = currentPos;
             newPos[i] -= j;
-            newPos[(i + 1) % k] += j;
+            newPos[(k + i - 1) % k] += j;
 
             if (comparePositions(newPos, currentPos)) continue;
 
