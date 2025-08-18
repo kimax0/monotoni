@@ -89,10 +89,11 @@ vector<vector<int>> legalMoves(const vector<int>& currentPos, int n, const vecto
     return moves;
 }
 
-void bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<int>> path) {
+int bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<int>> path) {
     // Add the current position to the path
     path.push_back(currentPos);
 
+    vector<int> returnValues = {};
     vector<vector<int>> moves = legalMoves(currentPos, n, precomputeUnitCircle(n));
     if (moves.empty()) {
         // Print the entire game
@@ -104,17 +105,29 @@ void bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<
         }
         if (player == 1) {
             cout << "Player 1 wins!\n";
+            return 1;
         } else if (player == -1) {
             cout << "Player 2 wins!\n";
+            return -1;
         } else {
             cout << "Nesto se opasno desilo.\n";
+            return 0;
         }
         cout << "---------------------------\n";
-        return;
     }
 
     for (const vector<int>& move : moves) {
-        bruteForce(move, n, -player, path);
+        returnValues.push_back(bruteForce(move, n, -player, path));
+    }
+    
+    if(player == 1) {
+        // Player 1's turn, find the maximum return value
+        int maxReturn = *max_element(returnValues.begin(), returnValues.end());
+        return maxReturn;
+    } else {
+        // Player 2's turn, find the minimum return value
+        int minReturn = *min_element(returnValues.begin(), returnValues.end());
+        return minReturn;
     }
 }
 
@@ -153,7 +166,15 @@ int main(int argc, char* argv[]) {
         cout << endl;
     }
 
-    bruteForce(startPos, n, 1, {});
+    int winner = bruteForce(startPos, n, 1, {});
+    cout << "Winner: ";
+    if (winner == 1) {
+        cout << "Player 1\n";
+    } else if (winner == -1) {
+        cout << "Player 2\n";
+    } else {
+        cout << "No winner\n";
+    }
 
     return 0;
 }
