@@ -5,6 +5,10 @@
 
 using namespace std;
 
+bool printGames = false;
+bool printInfo = false;
+bool printWinner = true;
+
 // Precompute unit circle coordinates for n points
 vector<pair<double, double>> precomputeUnitCircle(int n) {
     vector<pair<double, double>> circle(n);
@@ -97,23 +101,30 @@ int bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<i
     vector<vector<int>> moves = legalMoves(currentPos, n, precomputeUnitCircle(n));
     if (moves.empty()) {
         // Print the entire game
-        cout << "Game sequence:\n";
-        for (auto &pos : path) {
-            cout << "  ";
-            for (int val : pos) cout << val << " ";
-            cout << "\n";
+        if (printGames) {
+            cout << "Game sequence:\n";
+            for (auto &pos : path) {
+                cout << "  ";
+                for (int val : pos) cout << val << " ";
+                cout << "\n";
+            }
         }
         if (player == 1) {
-            cout << "Player 1 wins!\n";
+            if (printGames) {
+                cout << "Player 1 wins!\n";
+            }
             return 1;
         } else if (player == -1) {
-            cout << "Player 2 wins!\n";
+            if (printGames) {
+                cout << "Player 2 wins!\n";
+            }
             return -1;
         } else {
-            cout << "Nesto se opasno desilo.\n";
+            if (printGames) {
+                cout << "No winner.\n";
+            }
             return 0;
         }
-        cout << "---------------------------\n";
     }
 
     for (const vector<int>& move : moves) {
@@ -155,26 +166,30 @@ int main(int argc, char* argv[]) {
     vector<vector<int>> moves = legalMoves(startPos, n, circle);
 
     // Output
-    cout << "Starting positions: ";
-    for (int val : startPos) cout << val << " ";
-    cout << "\nCoordinates of the polygon vertices: ";
-    for (auto &coord : coordinates) cout << "(" << coord.first << "," << coord.second << ") ";
-    cout << "\nArea of the polygon: " << area << "\nLegal moves from the current position:\n";
-
-    for (auto &move : moves) {
-        for (int val : move) cout << val << " ";
-        cout << endl;
+    if (printInfo) {
+        cout << "Starting positions: ";
+        for (int val : startPos) cout << val << " ";
+        cout << "\nCoordinates of the polygon vertices: ";
+        for (auto &coord : coordinates) cout << "(" << coord.first << "," << coord.second << ") ";
+        cout << "\nArea of the polygon: " << area << "\nLegal moves from the current position:\n";
+        for (auto &move : moves) {
+            for (int val : move) cout << val << " ";
+            cout << endl;
+        }
     }
 
     int winner = bruteForce(startPos, n, 1, {});
-    cout << "Winner: ";
-    if (winner == 1) {
-        cout << "Player 1\n";
-    } else if (winner == -1) {
-        cout << "Player 2\n";
-    } else {
-        cout << "No winner\n";
+    if (printWinner) {
+        if (winner == 1) {
+            cout << "Player 1 wins!\n";
+        } else if (winner == -1) {
+            cout << "Player 2 wins!\n";
+        } else {
+            cout << "No winner.\n";
+        }        
     }
 
     return 0;
 }
+
+//  g++ main.cpp -o main
