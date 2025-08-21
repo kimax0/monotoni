@@ -1,230 +1,228 @@
-#include <bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <algorithm>
+#include <map>
+#include <set>
+#include <fstream>
+#include <sstream>
+
 using namespace std;
 
-// ------------------------------ Globals & Types ------------------------------
-static unordered_map<string, int8_t> TT; // transposition table
-static const double EPS = 1e-12;
+bool printGames = false;
+bool printInfo = false;
+bool printWinner = true;
 
-struct Move {
-    vector<int> pos;
-    double area;
+// --- Graph structures ---
+struct NodeInfo {
+    string label;
+    int player;
+    bool terminal;
 };
+map<string, NodeInfo> nodes;
+set<pair<string,string>> edges;
 
-// ------------------------------ Geometry ------------------------------
+// Helper: stringify a position
+string posToString(const vector<int>& pos) {
+    ostringstream oss;
+    for (int v : pos) oss << v << ",";
+    return oss.str();
+}
+
+// Precompute unit circle coordinates for n points
 vector<pair<double, double>> precomputeUnitCircle(int n) {
     vector<pair<double, double>> circle(n);
-    const double tau = 2.0 * M_PI;
     for (int i = 0; i < n; ++i) {
-        double ang = tau * (static_cast<double>(i) / static_cast<double>(n));
-        circle[i] = {cos(ang), sin(ang)};
+        circle[i] = {cos(2 * M_PI * i / n), sin(2 * M_PI * i / n)};
     }
     return circle;
 }
 
-inline vector<pair<double, double>> getCoordinates(const vector<int>& currentPos,
-                                                   const vector<pair<double, double>>& circle) {
-    vector<pair<double,double>> coordinates;
-    coordinates.reserve(currentPos.size());
+// Get coordinates of the polygon vertices based on the spaces between counters
+vector<pair<double, double>> getCoordinates(const vector<int>& currentPos, const vector<pair<double, double>>& circle) {
+    vector<pair<double, double>> coordinates;
     int index = 0;
-    int mod = static_cast<int>(circle.size());
-    for (int gap : currentPos) {
-        coordinates.push_back(circle[index % mod]);
-        index += gap;
+    for (int j : currentPos) {
+        coordinates.push_back(circle[index % circle.size()]);
+        index += j;
     }
     return coordinates;
 }
 
-inline double getArea(const vector<pair<double, double>>& coordinates) {
-    double area2 = 0.0;
-    const int k = (int)coordinates.size();
+// Shoelace formula
+double getArea(const vector<pair<double, double>>& coordinates) {
+    double area = 0.0;
+    int k = coordinates.size();
     int j = k - 1;
     for (int i = 0; i < k; ++i) {
-        area2 += (coordinates[j].first + coordinates[i].first) * (coordinates[j].second - coordinates[i].second);
+        area += (coordinates[j].first + coordinates[i].first) * (coordinates[j].second - coordinates[i].second);
         j = i;
     }
-    return fabs(area2 / 2.0);
+    return abs(area / 2.0);
 }
 
-// ------------------------------ Canonicalization ------------------------------
-template <class It1, class It2>
-inline int lexCompare(It1 a_begin, It1 a_end, It2 b_begin, It2 b_end) {
-    for (; a_begin != a_end && b_begin != b_end; ++a_begin, ++b_begin) {
-        if (*a_begin < *b_begin) return -1;
-        if (*a_begin > *b_begin) return 1;
+// Compare positions with rotations and reversals
+bool comparePositions(const vector<int>& pos1, vector<int> pos2) {
+    int k = pos1.size();
+    for (int i = 0; i < k; ++i) {
+        if (pos1 == pos2 || pos1 == vector<int>(pos2.rbegin(), pos2.rend()))
+            return true;
+        rotate(pos2.begin(), pos2.begin() + 1, pos2.end());
     }
-    if (a_begin == a_end && b_begin == b_end) return 0;
-    return (a_begin == a_end ? -1 : 1);
+    return false;
 }
 
-// Booth's algorithm for minimal rotation index (O(k))
-int minimalRotationIndex(const vector<int>& s) {
-    int n = (int)s.size();
-    vector<int> ss(2*n);
-    for (int i = 0; i < n; ++i) { ss[i] = ss[i+n] = s[i]; }
-    int i = 0, j = 1, k = 0;
-    while (i < n && j < n && k < n) {
-        int a = ss[i+k], b = ss[j+k];
-        if (a == b) { ++k; continue; }
-        if (a > b) i = i + k + 1;
-        else       j = j + k + 1;
-        if (i == j) ++j;
-        k = 0;
-    }
-    return min(i,j);
-}
-
-inline void minRotation(const vector<int>& s, vector<int>& out) {
-    int n = (int)s.size();
-    int idx = minimalRotationIndex(s);
-    out.resize(n);
-    for (int t = 0; t < n; ++t) out[t] = s[(idx + t) % n];
-}
-
-string canonicalKey(const vector<int>& pos) {
-    vector<int> rot, rot_rev, rev(pos.rbegin(), pos.rend());
-    minRotation(pos, rot);
-    minRotation(rev, rot_rev);
-    int cmp = lexCompare(rot.begin(), rot.end(), rot_rev.begin(), rot_rev.end());
-    const vector<int>& best = (cmp <= 0 ? rot : rot_rev);
-    string key;
-    key.reserve(best.size() * 4);
-    for (int x : best) { key += to_string(x); key.push_back(','); }
-    return key;
-}
-
-// include player in the key so TT entries aren't reused for different players
-inline string canonicalKeyWithPlayer(const vector<int>& pos, int player) {
-    string k = canonicalKey(pos);
-    k.push_back('|');
-    k.push_back((player == 1) ? '1' : '2');
-    return k;
-}
-
-// ------------------------------ Move generation ------------------------------
-vector<Move> legalMoves(const vector<int>& currentPos,
-                        const int n,
-                        const vector<pair<double,double>>& circle)
-{
-    vector<Move> moves;
-    const int k = (int)currentPos.size();
-    const double currentArea = getArea(getCoordinates(currentPos, circle));
-    unordered_set<string> seen;
-    seen.reserve(k * 8);
-
-    const string currentCanon = canonicalKey(currentPos);
-
-    auto try_push = [&](vector<int>& newPos) {
-        // skip if equivalent to current position under rotation/reflection
-        string newCanon = canonicalKey(newPos);
-        if (newCanon == currentCanon) return;
-
-        // area test
-        double newArea = getArea(getCoordinates(newPos, circle));
-        if (newArea > currentArea + EPS) {
-            if (seen.insert(newCanon).second) {
-                moves.push_back({ std::move(newPos), newArea });
-            }
-        }
-    };
+// Generate legal moves
+vector<vector<int>> legalMoves(const vector<int>& currentPos, int n, const vector<pair<double,double>>& circle) {
+    vector<vector<int>> moves;
+    int k = currentPos.size();
+    double currentArea = getArea(getCoordinates(currentPos, circle));
 
     for (int i = 0; i < k; ++i) {
+        // Forward redistribution
         for (int j = 1; j < currentPos[i]; ++j) {
             vector<int> newPos = currentPos;
             newPos[i] -= j;
             newPos[(k + i - 1) % k] += j;
-            try_push(newPos);
+
+            if (comparePositions(newPos, currentPos)) continue;
+
+            double newArea = getArea(getCoordinates(newPos, circle));
+            if (newArea > currentArea) {
+                bool exists = false;
+                for (auto &move : moves) if (comparePositions(move, newPos)) { exists = true; break; }
+                if (!exists) moves.push_back(newPos);
+            }
         }
+        // Backward redistribution
         for (int j = 1; j < currentPos[(k + i - 1) % k]; ++j) {
             vector<int> newPos = currentPos;
             newPos[i] += j;
             newPos[(i - 1 + k) % k] -= j;
-            try_push(newPos);
+
+            if (comparePositions(newPos, currentPos)) continue;
+
+            double newArea = getArea(getCoordinates(newPos, circle));
+            if (newArea > currentArea) {
+                bool exists = false;
+                for (auto &move : moves) if (comparePositions(move, newPos)) { exists = true; break; }
+                if (!exists) moves.push_back(newPos);
+            }
         }
     }
-
-    // order moves by descending resulting area -> improves alpha-beta pruning
-    sort(moves.begin(), moves.end(), [](const Move& a, const Move& b){ return a.area > b.area; });
     return moves;
 }
 
-// ------------------------------ Minimax with Alpha-Beta + Memo ------------------------------
-int solve(const vector<int>& currentPos,
-          const int n,
-          const vector<pair<double,double>>& circle,
-          int player,
-          int alpha,
-          int beta)
-{
-    // TT lookup must include player to move
-    const string keyWithPlayer = canonicalKeyWithPlayer(currentPos, player);
-    if (auto it = TT.find(keyWithPlayer); it != TT.end()) return it->second;
+int bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<int>> path) {
+    // Add the current position to the path
+    path.push_back(currentPos);
 
-    vector<Move> moves = legalMoves(currentPos, n, circle);
+    string posKey = posToString(currentPos);
+    if (!nodes.count(posKey)) {
+        NodeInfo info;
+        info.label = posKey;
+        info.player = player;
+        info.terminal = false;
+        nodes[posKey] = info;
+    }
 
+    vector<int> returnValues = {};
+    vector<vector<int>> moves = legalMoves(currentPos, n, precomputeUnitCircle(n));
     if (moves.empty()) {
-        // preserve original semantics: return 1 if player==1 else -1
-        int result = (player == 1 ? 1 : -1);
-        TT.emplace(keyWithPlayer, (int8_t)result);
-        return result;
+        nodes[posKey].terminal = true;
+        return (player == 1 ? 1 : -1);
     }
 
-    int best;
-    if (player == 1) {
-        best = INT_MIN;
-        for (size_t i = 0; i < moves.size(); ++i) {
-            int val = solve(moves[i].pos, n, circle, -1, alpha, beta);
-            if (val > best) best = val;
-            if (best > alpha) alpha = best;
-            if (beta <= alpha) break;
-        }
+    for (const vector<int>& move : moves) {
+        string nextKey = posToString(move);
+        edges.insert({posKey, nextKey});
+        returnValues.push_back(bruteForce(move, n, -player, path));
+    }
+    
+    if(player == 1) {
+        int maxReturn = *max_element(returnValues.begin(), returnValues.end());
+        return maxReturn;
     } else {
-        best = INT_MAX;
-        for (size_t i = 0; i < moves.size(); ++i) {
-            int val = solve(moves[i].pos, n, circle, +1, alpha, beta);
-            if (val < best) best = val;
-            if (best < beta) beta = best;
-            if (beta <= alpha) break;
-        }
+        int minReturn = *min_element(returnValues.begin(), returnValues.end());
+        return minReturn;
     }
-
-    TT.emplace(keyWithPlayer, (int8_t)best);
-    return best;
 }
 
-// ------------------------------ Main ------------------------------
-int main(int argc, char* argv[]) {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
+void writeDotFile(const string& filename, const string& startKey) {
+    ofstream ofs(filename);
+    ofs << "digraph G {\n";
+    ofs << "  rankdir=TB;\n";              // top-to-bottom layout
+    ofs << "  ranksep=2;\n";             // vertical spacing
+    ofs << "  nodesep=0.6;\n";             // horizontal spacing
+    ofs << "  splines=true;\n";            // smoother edges
+    ofs << "  overlap=false;\n";           // prevent overlapping
+    ofs << "  graph [dpi=120];\n";         // higher resolution
+    ofs << "\n";
 
+    for (auto &kv : nodes) {
+        string key = kv.first;
+        NodeInfo info = kv.second;
+        string color = "white";
+        if (key == startKey) color = "green";
+        else if (info.terminal) color = "red";
+        ofs << "  \"" << key << "\" [label=\"" << key
+            << " p=" << info.player
+            << "\", style=filled, fillcolor=" << color << "];\n";
+    }
+    for (auto &e : edges) {
+        ofs << "  \"" << e.first << "\" -> \"" << e.second << "\";\n";
+    }
+    ofs << "}\n";
+    ofs.close();
+}
+
+int main(int argc, char* argv[]) {
     if (argc != 3) {
         cout << "Usage: " << argv[0] << " <number_of_points> <number_of_counters>\n";
         return 1;
     }
 
-    const int n = atoi(argv[1]);
-    const int k = atoi(argv[2]);
+    int n = atoi(argv[1]);
+    int k = atoi(argv[2]);
 
+    // Starting positions
     vector<int> startPos(k - 1, 1);
     startPos.push_back(n - k + 1);
+    string startKey = posToString(startPos);
 
-    const vector<pair<double,double>> circle = precomputeUnitCircle(n);
-    const vector<pair<double,double>> coordinates = getCoordinates(startPos, circle);
-    const double area = getArea(coordinates);
+    // Precompute circle coordinates
+    vector<pair<double,double>> circle = precomputeUnitCircle(n);
 
-    cout << "Starting positions: ";
-    for (int val : startPos) cout << val << " ";
-    cout << "\nCoordinates of the polygon vertices: ";
-    for (auto &coord : coordinates) cout << "(" << coord.first << "," << coord.second << ") ";
-    cout << "\nArea of the polygon: " << area << endl;
+    // Get coordinates and area
+    vector<pair<double,double>> coordinates = getCoordinates(startPos, circle);
+    double area = getArea(coordinates);
 
-    const int winner = solve(startPos, n, circle, /*player=*/1, /*alpha=*/INT_MIN, /*beta=*/INT_MAX);
-    cout << "Winner: ";
-    if (winner == 1) cout << "Player 1\n"; 
-    else if (winner == -1) cout << "Player 2\n";
-    else cout << "No winner\n";
+    vector<vector<int>> moves = legalMoves(startPos, n, circle);
+
+    if (printInfo) {
+        cout << "Starting positions: ";
+        for (int val : startPos) cout << val << " ";
+        cout << "\nArea of the polygon: " << area << "\n";
+    }
+
+    int winner = bruteForce(startPos, n, 1, {});
+
+    // Write .dot file
+    writeDotFile("graph.dot", startKey);
+
+    if (printWinner) {
+        if (winner == 1) {
+            cout << "Player 1 wins!\n";
+        } else if (winner == -1) {
+            cout << "Player 2 wins!\n";
+        } else {
+            cout << "No winner.\n";
+        }
+    }
 
     return 0;
 }
 
-// g++ -O3 -march=native -DNDEBUG -o main main.cpp
-
+// Compile: g++ main.cpp -o main
+// Run: ./main <points> <counters>
+// Output: graph.dot (render with: dot -Tpng graph.dot -o graph.png)
