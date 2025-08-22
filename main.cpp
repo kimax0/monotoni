@@ -111,14 +111,14 @@ int bruteForce(const vector<int>& currentPos, int n, int player, vector<vector<i
         }
         if (player == 1) {
             if (printGames) {
-                cout << "Player 1 wins!\n";
-            }
-            return 1;
-        } else if (player == -1) {
-            if (printGames) {
                 cout << "Player 2 wins!\n";
             }
             return -1;
+        } else if (player == -1) {
+            if (printGames) {
+                cout << "Player 1 wins!\n";
+            }
+            return 1;
         } else {
             if (printGames) {
                 cout << "No winner.\n";
