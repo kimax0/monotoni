@@ -5,20 +5,22 @@
 
 using namespace std;
 
-bool printGames = false;
+bool printGames = true;
 bool printInfo = false;
 bool printWinner = true;
 
-// Precompute unit circle coordinates for n points
+// Precompute n coordinates on the unit circle
+// Has an issue when sin or cos is very close to 0
 vector<pair<double, double>> precomputeUnitCircle(int n) {
     vector<pair<double, double>> circle(n);
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n; i++) {
         circle[i] = {cos(2 * M_PI * i / n), sin(2 * M_PI * i / n)};
     }
     return circle;
 }
 
 // Get coordinates of the polygon vertices based on the spaces between counters
+// Also has an issue when sin or cos is very close to 0
 vector<pair<double, double>> getCoordinates(const vector<int>& currentPos, const vector<pair<double, double>>& circle) {
     vector<pair<double, double>> coordinates;
     int index = 0;
@@ -68,7 +70,7 @@ vector<vector<int>> legalMoves(const vector<int>& currentPos, int n, const vecto
             if (comparePositions(newPos, currentPos)) continue;
 
             double newArea = getArea(getCoordinates(newPos, circle));
-            if (newArea > currentArea) {
+            if (newArea > currentArea + 1e-9) {
                 bool exists = false;
                 for (auto &move : moves) if (comparePositions(move, newPos)) { exists = true; break; }
                 if (!exists) moves.push_back(newPos);
@@ -83,7 +85,7 @@ vector<vector<int>> legalMoves(const vector<int>& currentPos, int n, const vecto
             if (comparePositions(newPos, currentPos)) continue;
 
             double newArea = getArea(getCoordinates(newPos, circle));
-            if (newArea > currentArea) {
+            if (newArea > currentArea + 1e-9) {
                 bool exists = false;
                 for (auto &move : moves) if (comparePositions(move, newPos)) { exists = true; break; }
                 if (!exists) moves.push_back(newPos);
